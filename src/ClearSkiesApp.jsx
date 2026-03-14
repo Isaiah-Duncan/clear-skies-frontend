@@ -879,15 +879,10 @@ export default function App() {
         {viewState === 'result' && (
           <div className="animate-fade-up w-full flex flex-col">
             <div className="flex justify-between items-center mb-6 px-2">
-              <h1 className="text-xl font-extrabold tracking-tight" style={{ color: t.ink }}>Clear Skies</h1>
-              <div className="flex items-center gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm border" style={{ background: t.card, borderColor: t.border, color: t.inkMid }}>
-                  {flightData.flightId}
-                </div>
-                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-1.5 rounded-full transition-colors opacity-60 hover:opacity-100" style={{ color: t.ink }}>
-                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-                </button>
-              </div>
+              <h1 className="text-xl font-extrabold tracking-tight cursor-pointer" style={{ color: t.ink }} onClick={() => { setViewState('search'); setSearchInput(''); }}>Clear Skies</h1>
+              <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-1.5 rounded-full transition-colors opacity-60 hover:opacity-100" style={{ color: t.ink }}>
+                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
             </div>
 
             <div className="w-full rounded-[2rem] border overflow-hidden" style={{ background: t.card, borderColor: t.border, boxShadow: t.shadow }}>
@@ -1109,14 +1104,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Developer Jump Toolbar (To easily test paths) */}
-      <div className="fixed bottom-0 left-0 right-0 p-3 backdrop-blur-md border-t flex justify-center gap-2 text-[10px] font-bold uppercase tracking-wider z-50" style={{ background: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.8)', borderColor: t.border, color: t.inkMid }}>
-        <button onClick={() => setViewState('search')} className="hover:text-stone-400 px-2 py-1">Search</button>
-        <button onClick={() => { setFlightData(MOCK_FLIGHTS.AMBER); setViewState('result'); }} className="text-amber-500 hover:text-amber-400 px-2 py-1">Amber</button>
-        <button onClick={() => { setFlightData(MOCK_FLIGHTS.GREEN); setViewState('result'); }} className="text-emerald-500 hover:text-emerald-400 px-2 py-1">Green</button>
-        <button onClick={() => { setFlightData(MOCK_FLIGHTS.GRAY); setViewState('result'); }} className="hover:text-stone-400 px-2 py-1">Gray</button>
-        <button onClick={() => setViewState('error')} className="text-red-400 hover:text-red-300 px-2 py-1">Error</button>
-      </div>
     </div>
   );
 }
