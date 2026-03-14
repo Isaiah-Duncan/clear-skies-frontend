@@ -1,0 +1,2 @@
+[33md962501[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Remove dev toolbar, clickable logo, remove dot
+[33mecb3cba[m[33m ([m[1;31morigin/main[m[33m)[m Initial commit - Clear Skies frontend

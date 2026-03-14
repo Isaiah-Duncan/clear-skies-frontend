@@ -175,7 +175,7 @@ function TurbulenceGraph({ flightData, isDark, t }) {
   const svgRef = useRef(null);
 
   const { durationMin, bumpStart, bumpEnd, turbulenceCurve, state } = flightData;
-  const isGray = state === 'gray';
+  const isGray = state === 'gray' || !Array.isArray(turbulenceCurve) || turbulenceCurve.length < 2;
 
   // ── Gray guard — bail out before any SVG math ──────────────────────────────
   if (isGray) {
