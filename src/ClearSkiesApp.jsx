@@ -97,6 +97,7 @@ const MOCK_FLIGHTS = {
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 function sampleCurve(curve, t, key = "intensity") {
+  if (!curve || curve.length === 0) return 0;
   if (t <= curve[0].t) return curve[0][key];
   if (t >= curve[curve.length - 1].t) return curve[curve.length - 1][key];
   for (let i = 0; i < curve.length - 1; i++) {
@@ -584,9 +585,10 @@ function PlaneIcon({ progress, intensity, color }) {
 
 // ─── 4. EXPANDED ALTITUDE BAR ─────────────────────────────────────────────────
 function ExpandedAltitudeVisualizer({ altitude, progress, color, tokens }) {
+  const safeAlt = altitude ?? 0;
   const phase = getAltitudePhase(progress);
-  const { label, sub } = getAltitudeText(altitude, phase);
-  const fill = Math.min(altitude / 35000, 1);
+  const { label, sub } = getAltitudeText(safeAlt, phase);
+  const fill = Math.min(safeAlt / 35000, 1);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center w-full animate-fade-in px-4">
@@ -604,7 +606,7 @@ function ExpandedAltitudeVisualizer({ altitude, progress, color, tokens }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 20 }}>
             <span style={{ fontSize: 44, fontWeight: 800, color: tokens.ink, letterSpacing: "-1.5px", lineHeight: 1 }}>
-              {Math.round(altitude).toLocaleString()}
+              {Math.round(safeAlt).toLocaleString()}
             </span>
             <span style={{ fontSize: 14, fontWeight: 800, color: tokens.inkMid }}>FT</span>
           </div>
@@ -621,11 +623,13 @@ function ExpandedAltitudeVisualizer({ altitude, progress, color, tokens }) {
 
 // ─── 5. FLIGHT PROGRESS ───────────────────────────────────────────────────────
 function FlightProgress({ progress, flight, color, tokens }) {
-  const currentMin  = Math.round(progress * flight.durationMin);
-  const minutesLeft = flight.durationMin - currentMin;
-  const inBump      = currentMin >= flight.bumpStart && currentMin <= flight.bumpEnd;
-  const nearBump    = !inBump && (flight.bumpStart - currentMin) <= 35 && currentMin < flight.bumpStart;
-  const bumpLeft    = flight.bumpEnd - currentMin;
+  const bumpStart   = flight?.bumpStart ?? 0;
+  const bumpEnd     = flight?.bumpEnd   ?? 0;
+  const currentMin  = Math.round(progress * (flight?.durationMin ?? 0));
+  const minutesLeft = (flight?.durationMin ?? 0) - currentMin;
+  const inBump      = currentMin >= bumpStart && currentMin <= bumpEnd;
+  const nearBump    = !inBump && (bumpStart - currentMin) <= 35 && currentMin < bumpStart;
+  const bumpLeft    = bumpEnd - currentMin;
 
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -635,7 +639,7 @@ function FlightProgress({ progress, flight, color, tokens }) {
         <span>{flight.destination}</span>
       </div>
       <div style={{ position: "relative", height: 5, borderRadius: 5, background: tokens.border }}>
-        <div style={{ position: "absolute", left: `${(flight.bumpStart / flight.durationMin) * 100}%`, width: `${((flight.bumpEnd - flight.bumpStart) / flight.durationMin) * 100}%`, top: -1, bottom: -1, background: "rgba(245, 158, 11, 0.2)", borderRadius: 3 }} />
+        <div style={{ position: "absolute", left: `${(bumpStart / (flight?.durationMin || 1)) * 100}%`, width: `${((bumpEnd - bumpStart) / (flight?.durationMin || 1)) * 100}%`, top: -1, bottom: -1, background: "rgba(245, 158, 11, 0.2)", borderRadius: 3 }} />
         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${progress * 100}%`, background: color.css, borderRadius: 5, opacity: 0.55, transition: "width 0.8s ease, background 3s ease" }} />
         <div style={{ position: "absolute", left: `${progress * 100}%`, top: "50%", transform: "translate(-50%, -50%)", width: 11, height: 11, borderRadius: "50%", background: color.css, border: `2px solid ${tokens.bg}`, boxShadow: `0 0 7px ${color.css}55`, transition: "left 0.8s ease, background 3s ease", zIndex: 2 }} />
       </div>
@@ -657,7 +661,14 @@ function FlightProgress({ progress, flight, color, tokens }) {
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [viewState, setViewState] = useState('search'); 
-  const [flightData, setFlightData] = useState(MOCK_FLIGHTS.AMBER);
+  const [flightData, setFlightData] = useState({
+    state: 'gray',
+    turbulenceCurve: [{ t: 0, intensity: 0 }, { t: 1, intensity: 0 }],
+    altitudeCurve:   [{ t: 0, alt: 0 },       { t: 1, alt: 0 }],
+    bumpStart: 0,
+    bumpEnd:   0,
+    durationMin: 0,
+  });
   const [searchInput, setSearchInput] = useState('');
   const [showProofOfWork, setShowProofOfWork] = useState(false);
   const [liveTab, setLiveTab] = useState('altitude');
@@ -707,8 +718,9 @@ export default function App() {
 
   useEffect(() => {
     if (viewState !== 'live') return;
-    const target = sampleCurve(flightData.turbulenceCurve, progress);
-    setIntensity(target);
+    if (flightData.turbulenceCurve?.length > 1) {
+      setIntensity(sampleCurve(flightData.turbulenceCurve, progress));
+    }
   }, [progress, viewState, flightData]);
 
   useEffect(() => {
@@ -718,7 +730,9 @@ export default function App() {
         const diff = intensity - prev;
         return Math.abs(diff) < 0.001 ? intensity : prev + diff * 0.03;
       });
-      setAltitude(sampleCurve(flightData.altitudeCurve, progress, "alt"));
+      if (flightData.altitudeCurve?.length > 1) {
+        setAltitude(sampleCurve(flightData.altitudeCurve, progress, "alt"));
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
