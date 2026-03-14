@@ -678,9 +678,11 @@ export default function App() {
   const [altitude,  setAltitude]  = useState(18000);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loadingText, setLoadingText] = useState("Connecting to live radar...");
-  
-  const rafRef = useRef(null);
+  const [liveAltitude, setLiveAltitude] = useState(null); // null = use curve fallback
+
+  const rafRef      = useRef(null);
   const intervalRef = useRef(null);
+  const pollRef     = useRef(null);
 
  const handleSearchSubmit = async (e) => {
   e.preventDefault();
@@ -702,6 +704,7 @@ export default function App() {
       if (!data || data.state === 'out_of_scope') {
         setViewState('error');
       } else {
+        setLiveAltitude(null);
         setFlightData(data);
         setViewState('result');
       }
@@ -730,14 +733,38 @@ export default function App() {
         const diff = intensity - prev;
         return Math.abs(diff) < 0.001 ? intensity : prev + diff * 0.03;
       });
-      if (flightData.altitudeCurve?.length > 1) {
+      // Use real aircraft altitude when available; fall back to curve
+      if (liveAltitude != null) {
+        setAltitude(liveAltitude);
+      } else if (flightData.altitudeCurve?.length > 1) {
         setAltitude(sampleCurve(flightData.altitudeCurve, progress, "alt"));
       }
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [intensity, progress, viewState, flightData]);
+  }, [intensity, progress, viewState, flightData, liveAltitude]);
+
+  // ── Live position polling — every 30 s when in live mode ──────────────────
+  useEffect(() => {
+    if (viewState !== 'live' || !flightData.icao24) return;
+
+    const poll = async () => {
+      try {
+        const res  = await fetch(
+          `https://clear-skies-backend.vercel.app/api/live/${flightData.icao24}`
+        );
+        const data = await res.json();
+        if (data.altitude != null) setLiveAltitude(data.altitude);
+      } catch (_err) {
+        // Silently ignore — altitude falls back to curve
+      }
+    };
+
+    poll(); // immediate first fetch
+    pollRef.current = setInterval(poll, 30_000);
+    return () => clearInterval(pollRef.current);
+  }, [viewState, flightData.icao24]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -894,9 +921,16 @@ export default function App() {
           <div className="animate-fade-up w-full flex flex-col">
             <div className="flex justify-between items-center mb-6 px-2">
               <h1 className="text-xl font-extrabold tracking-tight cursor-pointer" style={{ color: t.ink }} onClick={() => { setViewState('search'); setSearchInput(''); }}>Clear Skies</h1>
-              <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-1.5 rounded-full transition-colors opacity-60 hover:opacity-100" style={{ color: t.ink }}>
-                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
+              <div className="flex items-center gap-3">
+                {flightData.flightId && (
+                  <div className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500">
+                    {flightData.flightId}
+                  </div>
+                )}
+                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-1.5 rounded-full transition-colors opacity-60 hover:opacity-100" style={{ color: t.ink }}>
+                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+                </button>
+              </div>
             </div>
 
             <div className="w-full rounded-[2rem] border overflow-hidden" style={{ background: t.card, borderColor: t.border, boxShadow: t.shadow }}>
@@ -1050,10 +1084,6 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-extrabold tracking-widest border transition-colors shadow-sm" style={{ background: t.bg, borderColor: t.border, color: t.inkMid }}>
-                <Plane size={14} className="opacity-60" /> {Math.round(altitude).toLocaleString()} FT
-              </div>
-
               <div className="flex items-center gap-1 mt-6 p-1 rounded-xl w-full max-w-[240px]" style={{ background: t.border }}>
                 <button onClick={() => setLiveTab('altitude')} className="flex-1 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-colors" style={{ background: liveTab === 'altitude' ? t.card : 'transparent', color: liveTab === 'altitude' ? t.ink : t.inkDim, boxShadow: liveTab === 'altitude' ? t.shadow : 'none' }}>Altitude</button>
                 <button onClick={() => setLiveTab('atmosphere')} className="flex-1 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-colors" style={{ background: liveTab === 'atmosphere' ? t.card : 'transparent', color: liveTab === 'atmosphere' ? t.ink : t.inkDim, boxShadow: liveTab === 'atmosphere' ? t.shadow : 'none' }}>Atmosphere</button>
@@ -1083,26 +1113,6 @@ export default function App() {
                       <FlightProgress progress={progress} flight={flightData} color={color} tokens={t} />
                     </div>
 
-                    <div className="p-5 rounded-2xl border" style={{ background: t.card, borderColor: t.border, boxShadow: t.shadow }}>
-                      <div className="text-[10px] font-extrabold uppercase tracking-widest mb-4" style={{ color: t.inkDim }}>Simulate flight position</div>
-                      <input
-                        type="range" min="0" max="100" step="0.5" className="sim-slider" value={progress * 100}
-                        style={{ background: `linear-gradient(to right, ${t.inkMid} ${progress * 100}%, ${t.border} ${progress * 100}%)` }}
-                        onChange={e => { setIsPlaying(false); setProgress(parseFloat(e.target.value) / 100); }}
-                      />
-                      <div className="flex justify-between mt-3 mb-4 text-[10px] font-semibold" style={{ color: t.inkDim }}>
-                        <span>Takeoff</span>
-                        <span>Bumps at {formatMinutes(flightData.bumpStart)}</span>
-                        <span>Landing</span>
-                      </div>
-                      <button
-                        onClick={() => { if (progress >= 0.99) setProgress(0); setIsPlaying(p => !p); }}
-                        className="w-full py-3 rounded-xl border text-[13px] font-bold transition-colors"
-                        style={{ background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,24,20,0.03)', borderColor: t.border, color: t.ink }}
-                      >
-                        {isPlaying ? "Pause" : "▶ Play through flight"}
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}
