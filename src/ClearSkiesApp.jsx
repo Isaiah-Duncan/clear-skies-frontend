@@ -165,7 +165,7 @@ const getTokens = (isDark) => ({
 });
 
 // ─── 1. PRE-FLIGHT TOPOGRAPHICAL GRAPH ────────────────────────────────────────
-function TurbulenceGraph({ flightData, isDark, t }) {
+function TurbulenceGraph({ flightData, isDark, t, progress = 0 }) {
   const [visible, setVisible] = useState(false);
   const [flowing, setFlowing] = useState(false);
   const [scrubT, setScrubT] = useState(0);
@@ -425,6 +425,39 @@ function TurbulenceGraph({ flightData, isDark, t }) {
 
         <circle cx={PAD.left} cy={baseline} r="3.5" fill={isGray ? t.border : "#5cb87a"} opacity="0.6" />
         <circle cx={W - PAD.right} cy={baseline} r="3.5" fill={isGray ? t.border : "#5cb87a"} opacity="0.6" />
+
+        {/* FIXED FLIGHT POSITION INDICATOR */}
+        {/* Shows where the plane currently is on the route — not draggable */}
+        {!isGray && progress > 0 && (
+          (() => {
+            const posX = PAD.left + Math.min(Math.max(progress, 0), 1) * gW;
+            const posIntensity = sampleCurve(turbulenceCurve, progress);
+            const posY = PAD.top + gH - posIntensity * gH * 0.88;
+            const planeColor = isDark ? '#e5e7eb' : '#374151';
+            return (
+              <g style={{ pointerEvents: 'none', opacity: visible ? 1 : 0, transition: 'opacity 0.6s ease' }}>
+                {/* Vertical dashed guide from curve down to baseline */}
+                <line
+                  x1={posX} y1={posY + 10} x2={posX} y2={baseline - 10}
+                  stroke={planeColor} strokeWidth={1} strokeDasharray="2 4" opacity={0.3}
+                />
+                {/* Small dot on the curve at current progress */}
+                <circle cx={posX} cy={posY} r={3.5} fill={planeColor} opacity={0.55} />
+                {/* Plane icon on baseline — top-down view, pointing right */}
+                <g transform={`translate(${posX}, ${baseline})`} opacity={0.72}>
+                  {/* Fuselage */}
+                  <path d="M-9,0 L-3,-1.5 L8,0 L-3,1.5 Z" fill={planeColor} />
+                  {/* Top wing */}
+                  <path d="M-3,-6 L1,-6 L2,0 L-4,0 Z" fill={planeColor} opacity={0.75} />
+                  {/* Bottom wing */}
+                  <path d="M-3,6 L1,6 L2,0 L-4,0 Z" fill={planeColor} opacity={0.75} />
+                  {/* Tail fin */}
+                  <path d="M-8,-3.5 L-6,0 L-8,3.5 Z" fill={planeColor} opacity={0.6} />
+                </g>
+              </g>
+            );
+          })()
+        )}
 
         {/* INTERACTIVE SCRUBBER LAYER */}
         {!isGray && (
@@ -941,7 +974,7 @@ export default function App() {
                 We're working on expanding our coverage every day.
               </p>
               <p className="text-[15px] leading-relaxed mb-8" style={{ color: t.inkMid }}>
-                In the meantime, rest assured — the vast majority of flights are completely smooth, and your pilots have full visibility of conditions ahead.
+                In the meantime, rest assured. The vast majority of flights are completely smooth, and your pilots have full visibility of conditions ahead.
               </p>
               <button
                 onClick={() => { setSearchInput(''); setViewState('search'); }}
@@ -985,7 +1018,7 @@ export default function App() {
 
               <div className="p-6">
                 <div className="mb-2 -mx-1">
-                  <TurbulenceGraph flightData={flightData} isDark={isDark} t={t} />
+                  <TurbulenceGraph flightData={flightData} isDark={isDark} t={t} progress={progress} />
                 </div>
                 {flightData.state !== 'gray' && (
                   <p className="text-center text-[11px] font-medium mb-6 px-2" style={{ color: t.inkDim }}>
@@ -1049,7 +1082,7 @@ export default function App() {
                       <div>
                         <p className="text-[14px] font-bold" style={{ color: t.ink }}>Pilots reroute in real time</p>
                         <p className="text-[13px] font-medium leading-snug mt-0.5" style={{ color: t.inkMid }}>
-                          Your crew actively monitors turbulence on onboard radar and can adjust altitude or heading to smooth out the ride — often before you'd ever feel it.
+                          Your crew actively monitors turbulence on onboard radar and can adjust altitude or heading to smooth out the ride, often before you would ever feel it.
                         </p>
                       </div>
                     </div>
@@ -1131,7 +1164,7 @@ export default function App() {
                         Smooth skies ahead.
                       </h2>
                       <p className="text-center text-[15px] leading-relaxed mb-10 px-2" style={{ color: t.inkMid }}>
-                        No turbulence expected on this route. Sit back, get comfortable, and enjoy the ride — it should be a calm one.
+                        No turbulence expected on this route. Sit back, get comfortable, and enjoy the ride. It should be a calm one.
                       </p>
                       <div className="mb-10" />
                     </>
