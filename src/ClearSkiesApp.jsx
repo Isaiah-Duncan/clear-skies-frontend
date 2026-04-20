@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plane, Headphones, CheckCircle2, ChevronDown, ChevronUp, MonitorPlay, Sun, Moon, Bell, ArrowLeft, Maximize, ShieldCheck, Coffee, Wind } from 'lucide-react';
+import { Plane, Headphones, CheckCircle2, ChevronDown, ChevronUp, Sun, Moon, Bell, ArrowLeft, Maximize, ShieldCheck, Coffee, Wind } from 'lucide-react';
 
 const fontStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&display=swap');
@@ -175,7 +175,7 @@ function TurbulenceGraph({ flightData, isDark, t }) {
   const interactingRef = useRef(false);
   const svgRef = useRef(null);
 
-  const { durationMin, bumpStart, bumpEnd, turbulenceCurve, state } = flightData;
+  const { durationMin, bumpStart, bumpEnd, turbulenceCurve, state, origin, destination } = flightData;
   const isGray = state === 'gray' || !Array.isArray(turbulenceCurve) || turbulenceCurve.length < 2;
 
   // ── Gray guard — bail out before any SVG math ──────────────────────────────
@@ -414,8 +414,11 @@ function TurbulenceGraph({ flightData, isDark, t }) {
         )}
 
         {/* X-axis Labels */}
-        {["TAKEOFF", "LANDING"].map((label, i) => (
-          <text key={label} x={i === 0 ? PAD.left : W - PAD.right} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fill={t.inkDim} fontSize="13" fontWeight="800" letterSpacing="0.8">
+        {[
+          { label: origin || "TAKEOFF",   anchor: "start", x: PAD.left },
+          { label: destination || "LANDING", anchor: "end",   x: W - PAD.right },
+        ].map(({ label, anchor, x }) => (
+          <text key={label + x} x={x} y={H - 8} textAnchor={anchor} fill={t.inkDim} fontSize="13" fontWeight="800" letterSpacing="0.8">
             {label}
           </text>
         ))}
@@ -701,8 +704,10 @@ export default function App() {
     const data = await res.json();
 
     setTimeout(() => {
-      if (!data || data.state === 'out_of_scope') {
+      if (!data) {
         setViewState('error');
+      } else if (data.state === 'out_of_scope' || data.reason === 'flight_not_found') {
+        setViewState('not_found');
       } else {
         setLiveAltitude(null);
         setFlightData(data);
@@ -915,6 +920,41 @@ export default function App() {
         )}
 
         {/* ============================================================== */}
+        {/* 3b. UNSUPPORTED ROUTE (Not in database / Out of scope)         */}
+        {/* ============================================================== */}
+        {viewState === 'not_found' && (
+          <>
+            <div className="absolute top-4 right-4 z-50">
+              <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full transition-colors opacity-60 hover:opacity-100" style={{ color: t.ink }}>
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+            </div>
+
+            <div className="animate-fade-up w-full mt-16 flex flex-col items-center text-center px-6">
+              <div className="w-20 h-20 rounded-full shadow-sm border flex items-center justify-center mb-6" style={{ background: t.card, borderColor: t.border, color: t.inkDim }}>
+                <Plane size={28} strokeWidth={2} className="transform -rotate-45" />
+              </div>
+              <h2 className="text-[22px] font-extrabold mb-3 tracking-tight" style={{ color: t.ink }}>
+                We don't have data for this route yet.
+              </h2>
+              <p className="text-[15px] leading-relaxed mb-4" style={{ color: t.inkMid }}>
+                We're working on expanding our coverage every day.
+              </p>
+              <p className="text-[15px] leading-relaxed mb-8" style={{ color: t.inkMid }}>
+                In the meantime, rest assured — the vast majority of flights are completely smooth, and your pilots have full visibility of conditions ahead.
+              </p>
+              <button
+                onClick={() => { setSearchInput(''); setViewState('search'); }}
+                className="w-full max-w-[240px] font-extrabold text-[15px] py-4 rounded-2xl transition-all shadow-sm border"
+                style={{ background: t.card, color: t.ink, borderColor: t.border }}
+              >
+                Try another flight
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ============================================================== */}
         {/* 4. THE RESULT CARD (Green, Amber, Gray)                        */}
         {/* ============================================================== */}
         {viewState === 'result' && (
@@ -944,9 +984,14 @@ export default function App() {
               </div>
 
               <div className="p-6">
-                <div className="mb-6 -mx-1">
+                <div className="mb-2 -mx-1">
                   <TurbulenceGraph flightData={flightData} isDark={isDark} t={t} />
                 </div>
+                {flightData.state !== 'gray' && (
+                  <p className="text-center text-[11px] font-medium mb-6 px-2" style={{ color: t.inkDim }}>
+                    Forecast reflects current corridor conditions. Exact timing may shift by a few minutes.
+                  </p>
+                )}
 
                 {flightData.state !== 'gray' && (
                   <div className="mb-8">
@@ -976,27 +1021,36 @@ export default function App() {
                 )}
 
                 <div>
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider mb-4" style={{ color: t.inkDim }}>Your Action Plan</h3>
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider mb-4" style={{ color: t.inkDim }}>Flight Conditions</h3>
                   <div className="space-y-4">
+                    {/* Weather status — dynamic by state */}
                     <div className="flex items-start gap-3">
-                      <div className="border p-2.5 rounded-xl shrink-0 shadow-sm" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', borderColor: t.border, color: t.inkMid }}><Plane size={18} className="transform -rotate-45" /></div>
+                      <div className="border p-2.5 rounded-xl shrink-0 shadow-sm" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', borderColor: t.border, color: flightData.state === 'amber' ? '#f59e0b' : '#5cb87a' }}>
+                        <Wind size={18} />
+                      </div>
                       <div>
-                        <p className="text-[14px] font-bold" style={{ color: t.ink }}>Snug Seatbelt</p>
-                        <p className="text-[13px] font-medium leading-snug mt-0.5" style={{ color: t.inkMid }}>Keeps you grounded and stops the physical "floating" feeling.</p>
+                        <p className="text-[14px] font-bold" style={{ color: t.ink }}>
+                          {flightData.state === 'amber' ? 'Light activity mid-route' : flightData.state === 'green' ? 'Clear air end to end' : 'Conditions syncing'}
+                        </p>
+                        <p className="text-[13px] font-medium leading-snug mt-0.5" style={{ color: t.inkMid }}>
+                          {flightData.state === 'amber'
+                            ? `Pilot reports show a brief patch of routine movement around the ${formatMinutes(flightData.bumpStart)}–${formatMinutes(flightData.bumpEnd)} mark. Completely normal and handled daily.`
+                            : flightData.state === 'green'
+                            ? 'Pilots flying this corridor recently reported smooth air throughout. No significant activity detected along your route today.'
+                            : 'Live radar data is still catching up for this route. Your crew has full situational awareness onboard.'}
+                        </p>
                       </div>
                     </div>
+                    {/* Pilot fact — always shown */}
                     <div className="flex items-start gap-3">
-                      <div className="border p-2.5 rounded-xl shrink-0 shadow-sm" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', borderColor: t.border, color: t.inkMid }}><Headphones size={18} /></div>
-                      <div>
-                        <p className="text-[14px] font-bold" style={{ color: t.ink }}>Headphones On</p>
-                        <p className="text-[13px] font-medium leading-snug mt-0.5" style={{ color: t.inkMid }}>Blocks routine engine noises so you don't anticipate drops.</p>
+                      <div className="border p-2.5 rounded-xl shrink-0 shadow-sm" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', borderColor: t.border, color: t.inkMid }}>
+                        <ShieldCheck size={18} />
                       </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="border p-2.5 rounded-xl shrink-0 shadow-sm" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', borderColor: t.border, color: t.inkMid }}><MonitorPlay size={18} /></div>
                       <div>
-                        <p className="text-[14px] font-bold" style={{ color: t.ink }}>Fixed Screen</p>
-                        <p className="text-[13px] font-medium leading-snug mt-0.5" style={{ color: t.inkMid }}>Watch a downloaded show. A stable visual frame overrides the inner ear.</p>
+                        <p className="text-[14px] font-bold" style={{ color: t.ink }}>Pilots reroute in real time</p>
+                        <p className="text-[13px] font-medium leading-snug mt-0.5" style={{ color: t.inkMid }}>
+                          Your crew actively monitors turbulence on onboard radar and can adjust altitude or heading to smooth out the ride — often before you'd ever feel it.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1032,38 +1086,67 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex-1 p-6 flex flex-col justify-center">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6 mx-auto bg-amber-500/10 text-amber-500"><Bell size={28} /></div>
-              <h2 className="text-2xl font-extrabold text-center mb-3" style={{ color: t.ink }}>30 minutes to bumps.</h2>
-              <p className="text-center text-[15px] leading-relaxed mb-10 px-2" style={{ color: t.inkMid }}>
-                We're approaching that routine bumpy patch we mapped out earlier. The crew is preparing the cabin. Now is a great time to set up your space.
-              </p>
+            {(() => {
+              const hasBumps = (flightData?.bumpStart ?? 0) > 0 && (flightData?.bumpEnd ?? 0) > 0;
+              const currentMinNudge = Math.round(progress * (flightData?.durationMin ?? 0));
+              const minsLeft = Math.max(0, (flightData?.bumpStart ?? 0) - currentMinNudge);
+              const countdownLabel = minsLeft === 0 ? "Bumpy patch approaching now." : `${formatMinutes(minsLeft)} to bumps.`;
 
-              <div className="space-y-3 mb-10">
-                <div className="p-4 rounded-2xl flex items-center gap-4 border" style={{ background: t.bg, borderColor: t.border }}>
-                  <div className="p-2.5 rounded-xl opacity-80" style={{ background: t.card, color: t.inkMid }}><Headphones size={20} /></div>
-                  <div>
-                    <p className="font-bold text-sm" style={{ color: t.ink }}>Put headphones on</p>
-                    <p className="text-xs mt-0.5" style={{ color: t.inkDim }}>Block engine noise changes.</p>
-                  </div>
-                </div>
-                <div className="p-4 rounded-2xl flex items-center gap-4 border" style={{ background: t.bg, borderColor: t.border }}>
-                  <div className="p-2.5 rounded-xl opacity-80" style={{ background: t.card, color: t.inkMid }}><Coffee size={20} /></div>
-                  <div>
-                    <p className="font-bold text-sm" style={{ color: t.ink }}>Secure hot drinks</p>
-                    <p className="text-xs mt-0.5" style={{ color: t.inkDim }}>Put lids on cups or stow them.</p>
-                  </div>
-                </div>
-              </div>
+              return (
+                <div className="flex-1 p-6 flex flex-col justify-center">
+                  {hasBumps ? (
+                    <>
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6 mx-auto bg-amber-500/10 text-amber-500">
+                        <Bell size={28} />
+                      </div>
+                      <h2 className="text-2xl font-extrabold text-center mb-3" style={{ color: t.ink }}>
+                        {countdownLabel}
+                      </h2>
+                      <p className="text-center text-[15px] leading-relaxed mb-10 px-2" style={{ color: t.inkMid }}>
+                        We're approaching that routine bumpy patch mapped out earlier. The crew is preparing the cabin. A great time to set up your space.
+                      </p>
+                      <div className="space-y-3 mb-10">
+                        <div className="p-4 rounded-2xl flex items-center gap-4 border" style={{ background: t.bg, borderColor: t.border }}>
+                          <div className="p-2.5 rounded-xl opacity-80" style={{ background: t.card, color: t.inkMid }}><Headphones size={20} /></div>
+                          <div>
+                            <p className="font-bold text-sm" style={{ color: t.ink }}>Put headphones on</p>
+                            <p className="text-xs mt-0.5" style={{ color: t.inkDim }}>Block engine noise changes.</p>
+                          </div>
+                        </div>
+                        <div className="p-4 rounded-2xl flex items-center gap-4 border" style={{ background: t.bg, borderColor: t.border }}>
+                          <div className="p-2.5 rounded-xl opacity-80" style={{ background: t.card, color: t.inkMid }}><Coffee size={20} /></div>
+                          <div>
+                            <p className="font-bold text-sm" style={{ color: t.ink }}>Secure hot drinks</p>
+                            <p className="text-xs mt-0.5" style={{ color: t.inkDim }}>Put lids on cups or stow them.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6 mx-auto bg-emerald-500/10 text-emerald-500">
+                        <ShieldCheck size={28} />
+                      </div>
+                      <h2 className="text-2xl font-extrabold text-center mb-3" style={{ color: t.ink }}>
+                        Smooth skies ahead.
+                      </h2>
+                      <p className="text-center text-[15px] leading-relaxed mb-10 px-2" style={{ color: t.inkMid }}>
+                        No turbulence expected on this route. Sit back, get comfortable, and enjoy the ride — it should be a calm one.
+                      </p>
+                      <div className="mb-10" />
+                    </>
+                  )}
 
-              <button 
-                onClick={() => setViewState('live')}
-                className="w-full font-extrabold text-[15px] py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
-                style={{ background: isDarkMode ? '#f3f4f6' : '#1a1814', color: isDarkMode ? '#1a1814' : '#fff' }}
-              >
-                <Maximize size={18} /> Enter Live Mode
-              </button>
-            </div>
+                  <button
+                    onClick={() => setViewState('live')}
+                    className="w-full font-extrabold text-[15px] py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
+                    style={{ background: isDarkMode ? '#f3f4f6' : '#1a1814', color: isDarkMode ? '#1a1814' : '#fff' }}
+                  >
+                    <Maximize size={18} /> Enter Live Mode
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         )}
 
