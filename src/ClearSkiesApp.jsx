@@ -58,6 +58,22 @@ const fontStyles = `
   @media (hover: hover) {
     .graph-container:not(:hover) .scrubber-ui:not(.force-show) { opacity: 0; }
   }
+
+  /* Flight Progress Pulse */
+  @keyframes pulseRing {
+    0%   { transform: scale(1);   opacity: 0.6; }
+    100% { transform: scale(3.0); opacity: 0;   }
+  }
+  .progress-ring {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: pulseRing 1.8s ease-out infinite;
+  }
+  .progress-ring-2 {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: pulseRing 1.8s ease-out 0.9s infinite;
+  }
 `;
 
 // ─── FLIGHT DATA MOCKS ────────────────────────────────────────────────────────
@@ -124,6 +140,53 @@ function lerpColor(intensity) {
   const g = Math.round(186 + (168 - 186) * t);
   const b = Math.round(138 + (56  - 138) * t);
   return { css: `rgb(${r},${g},${b})`, r, g, b };
+}
+
+// Maps ICAO aircraft type codes → human-readable display name
+function aircraftLabel(code) {
+  if (!code) return null;
+  const MAP = {
+    // Boeing Narrowbody
+    B732: 'Boeing 737-200', B733: 'Boeing 737-300', B734: 'Boeing 737-400',
+    B735: 'Boeing 737-500', B736: 'Boeing 737-600', B737: 'Boeing 737-700',
+    B738: 'Boeing 737-800', B739: 'Boeing 737-900', B73H: 'Boeing 737-800',
+    B3XM: 'Boeing 737 MAX 7', B7M8: 'Boeing 737 MAX 8', B7M9: 'Boeing 737 MAX 9',
+    B7MJ: 'Boeing 737 MAX 10', B38M: 'Boeing 737 MAX 8', B39M: 'Boeing 737 MAX 9',
+    // Boeing Widebody
+    B752: 'Boeing 757-200', B753: 'Boeing 757-300',
+    B762: 'Boeing 767-200', B763: 'Boeing 767-300', B764: 'Boeing 767-400',
+    B772: 'Boeing 777-200', B773: 'Boeing 777-300', B77L: 'Boeing 777-200LR',
+    B77W: 'Boeing 777-300ER', B778: 'Boeing 777X-8', B779: 'Boeing 777X-9',
+    B788: 'Boeing 787-8', B789: 'Boeing 787-9', B78X: 'Boeing 787-10',
+    B741: 'Boeing 747-100', B742: 'Boeing 747-200', B743: 'Boeing 747-300',
+    B744: 'Boeing 747-400', B748: 'Boeing 747-8',
+    // Airbus Narrowbody
+    A318: 'Airbus A318', A319: 'Airbus A319', A320: 'Airbus A320', A321: 'Airbus A321',
+    A19N: 'Airbus A319neo', A20N: 'Airbus A320neo', A21N: 'Airbus A321neo',
+    A21X: 'Airbus A321XLR',
+    // Airbus Widebody
+    A306: 'Airbus A300-600', A310: 'Airbus A310',
+    A332: 'Airbus A330-200', A333: 'Airbus A330-300',
+    A338: 'Airbus A330-800neo', A339: 'Airbus A330-900neo',
+    A342: 'Airbus A340-200', A343: 'Airbus A340-300',
+    A345: 'Airbus A340-500', A346: 'Airbus A340-600',
+    A359: 'Airbus A350-900', A35K: 'Airbus A350-1000',
+    A388: 'Airbus A380-800',
+    // Airbus A220 (formerly Bombardier C Series)
+    BCS1: 'Airbus A220-100', BCS3: 'Airbus A220-300',
+    // Embraer
+    E170: 'Embraer E170', E175: 'Embraer E175', E190: 'Embraer E190', E195: 'Embraer E195',
+    E75L: 'Embraer E175-E2', E75S: 'Embraer E175-E2',
+    E290: 'Embraer E190-E2', E295: 'Embraer E195-E2',
+    // Bombardier CRJ
+    CRJ2: 'Bombardier CRJ-200', CRJ7: 'Bombardier CRJ-700',
+    CRJ9: 'Bombardier CRJ-900', CRJX: 'Bombardier CRJ-1000',
+    // ATR
+    AT43: 'ATR 42-300', AT72: 'ATR 72', AT76: 'ATR 72-600',
+    // De Havilland Canada
+    DH8A: 'Dash 8 Q100', DH8B: 'Dash 8 Q200', DH8C: 'Dash 8 Q300', DH8D: 'Dash 8 Q400',
+  };
+  return MAP[code.toUpperCase()] ?? code;
 }
 
 function getAltitudePhase(progress) {
@@ -427,33 +490,25 @@ function TurbulenceGraph({ flightData, isDark, t, progress = 0 }) {
         <circle cx={W - PAD.right} cy={baseline} r="3.5" fill={isGray ? t.border : "#5cb87a"} opacity="0.6" />
 
         {/* FIXED FLIGHT POSITION INDICATOR */}
-        {/* Shows where the plane currently is on the route — not draggable */}
+        {/* Pulsing circle showing where the plane currently is — not draggable */}
         {!isGray && progress > 0 && (
           (() => {
             const posX = PAD.left + Math.min(Math.max(progress, 0), 1) * gW;
             const posIntensity = sampleCurve(turbulenceCurve, progress);
             const posY = PAD.top + gH - posIntensity * gH * 0.88;
-            const planeColor = isDark ? '#e5e7eb' : '#374151';
+            const progressColor = flightData.state === 'amber' ? '#f59e0b' : '#5cb87a';
             return (
               <g style={{ pointerEvents: 'none', opacity: visible ? 1 : 0, transition: 'opacity 0.6s ease' }}>
                 {/* Vertical dashed guide from curve down to baseline */}
                 <line
-                  x1={posX} y1={posY + 10} x2={posX} y2={baseline - 10}
-                  stroke={planeColor} strokeWidth={1} strokeDasharray="2 4" opacity={0.3}
+                  x1={posX} y1={posY + 10} x2={posX} y2={baseline - 4}
+                  stroke={progressColor} strokeWidth={1} strokeDasharray="2 4" opacity={0.35}
                 />
-                {/* Small dot on the curve at current progress */}
-                <circle cx={posX} cy={posY} r={3.5} fill={planeColor} opacity={0.55} />
-                {/* Plane icon on baseline — top-down view, pointing right */}
-                <g transform={`translate(${posX}, ${baseline})`} opacity={0.72}>
-                  {/* Fuselage */}
-                  <path d="M-9,0 L-3,-1.5 L8,0 L-3,1.5 Z" fill={planeColor} />
-                  {/* Top wing */}
-                  <path d="M-3,-6 L1,-6 L2,0 L-4,0 Z" fill={planeColor} opacity={0.75} />
-                  {/* Bottom wing */}
-                  <path d="M-3,6 L1,6 L2,0 L-4,0 Z" fill={planeColor} opacity={0.75} />
-                  {/* Tail fin */}
-                  <path d="M-8,-3.5 L-6,0 L-8,3.5 Z" fill={planeColor} opacity={0.6} />
-                </g>
+                {/* Outer pulsing rings */}
+                <circle cx={posX} cy={posY} r={6} fill={progressColor} className="progress-ring" />
+                <circle cx={posX} cy={posY} r={6} fill={progressColor} className="progress-ring-2" />
+                {/* Solid inner dot */}
+                <circle cx={posX} cy={posY} r={5} fill={progressColor} opacity={0.92} stroke="#fff" strokeWidth={1.5} />
               </g>
             );
           })()
@@ -1046,7 +1101,7 @@ export default function App() {
                           <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> Current radar and wind data
                         </div>
                         <div className="flex items-center gap-2 border text-xs font-semibold px-3 py-2 rounded-lg" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', borderColor: t.border, color: t.inkMid }}>
-                          <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> Factored for Boeing 737 aircraft weight
+                          <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> Factored for {aircraftLabel(flightData.aircraftType) || 'this aircraft'} characteristics
                         </div>
                       </div>
                     )}
